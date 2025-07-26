@@ -1,0 +1,59 @@
+# Core Flask dependencies
+Flask==2.3.3
+flask-restx==1.1.0
+flask-cors==4.0.0
+Werkzeug==2.3.7
+
+# Database dependencies
+pymongo==4.5.0
+snowflake-connector-python==3.3.1
+
+# AI/ML dependencies
+requests==2.31.0
+numpy==1.24.3
+pandas==2.0.3
+statistics==1.0.3.5
+
+# Temporal workflow dependencies
+temporalio==1.4.0
+
+# Logging and monitoring
+structlog==23.1.0
+
+# Async and WebSocket support
+asyncio
+websockets==11.0.3
+
+# Data processing and analytics
+scipy==1.11.2
+scikit-learn==1.3.0
+
+# Configuration and environment
+python-dotenv==1.0.0
+
+# Testing dependencies
+pytest==7.4.2
+pytest-asyncio==0.21.1
+
+# Email and notifications (optional)
+smtplib
+
+# JSON and data serialization
+dataclasses-json==0.5.14
+
+# Date and time utilities
+python-dateutil==2.8.2
+
+# HTTP client libraries
+httpx==0.24.1
+
+# Validation and schema
+pydantic==2.3.0
+
+# Security
+cryptography==41.0.4
+
+# Development dependencies
+black==23.7.0
+flake8==6.0.0
+mypy==1.5.1 
