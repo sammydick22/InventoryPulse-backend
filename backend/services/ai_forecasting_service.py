@@ -48,6 +48,9 @@ class AIForecastingService:
         
         try:
             self._get_minimax_config()
+            # Runtime tuning via Flask config
+            disable_stream = bool(current_app.config.get('MINIMAX_DISABLE_STREAM', False))
+            request_timeout = current_app.config.get('MINIMAX_TIMEOUT_SECONDS', 120)
             
             if not self.api_key:
                 return {"status": "error", "message": "MiniMax API not configured: MINIMAX_API_KEY environment variable is required"}
@@ -115,7 +118,7 @@ class AIForecastingService:
                 "messages": messages,
                 "temperature": 0.3,  # Lower temperature for more consistent forecasts (MiniMax-M1 default is 1.0)
                 "max_tokens": 2048,  # Increased for better responses
-                "stream": True  # Enable streaming for better performance and debugging
+                "stream": not disable_stream  # Streaming can be disabled via config
             }
             
             # Add structured output only for MiniMax-Text-01 (MiniMax-M1 doesn't support it)
@@ -165,12 +168,13 @@ class AIForecastingService:
                        temperature=payload.get('temperature'),
                        max_tokens=payload.get('max_tokens'))
             
+            # Use tuple timeout so we can have short connect timeout and longer read timeout
             response = requests.post(
                 url,
                 headers=headers,
                 json=payload,
-                timeout=60,  # Increased timeout for MiniMax API
-                stream=True  # Enable streaming
+                timeout=(10, request_timeout),
+                stream=payload.get("stream", False)
             )
             
             if response.status_code == 200:
@@ -257,7 +261,43 @@ class AIForecastingService:
                         }
                     else:
                         logger.error("No content received from MiniMax stream", total_chunks=chunk_count)
-                        return {"status": "error", "message": "No content received from streaming response"}
+                        # --- Fallback: retry without streaming to capture full response ---
+                        try:
+                            payload_no_stream = dict(payload)
+                            payload_no_stream["stream"] = False  # disable streaming
+                            resp_fallback = requests.post(
+                                url,
+                                headers=headers,
+                                json=payload_no_stream,
+                                timeout=60
+                            )
+                            if resp_fallback.status_code == 200:
+                                try:
+                                    data = resp_fallback.json()
+                                    content = ""
+                                    if isinstance(data, dict) and data.get("choices"):
+                                        choice = data["choices"][0]
+                                        # Common MiniMax patterns for non-streaming content
+                                        if "message" in choice and "content" in choice["message"]:
+                                            content = choice["message"]["content"]
+                                        elif "delta" in choice and "content" in choice["delta"]:
+                                            content = choice["delta"]["content"]
+                                    if content:
+                                        elapsed_time = time.time() - start_time
+                                        logger.info("MiniMax non-streaming fallback succeeded", content_length=len(content))
+                                        return {
+                                            "status": "success",
+                                            "content": content,
+                                            "usage": {"stream_chunks": 0, "elapsed_seconds": elapsed_time}
+                                        }
+                                    else:
+                                        logger.warning("Fallback non-streaming response had no content", response_preview=str(data)[:300])
+                                except Exception as parse_err:
+                                    logger.warning("Failed to parse fallback response", error=str(parse_err))
+                        except Exception as fallback_err:
+                            logger.warning("Non-streaming fallback failed", error=str(fallback_err))
+                        
+                        return {"status": "error", "message": "No content received from MiniMax stream or fallback"}
                         
                 except Exception as stream_error:
                     logger.error("Error processing MiniMax stream", error=str(stream_error))
